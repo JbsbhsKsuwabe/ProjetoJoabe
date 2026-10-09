@@ -1,0 +1,303 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Inventário de Eletrônicos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+
+        nav {
+            background: #333;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+            nav a {
+                color: white;
+                text-decoration: none;
+                padding: 10px 20px;
+                font-weight: bold;
+            }
+
+                nav a:hover {
+                    background: #555;
+                    border-radius: 3px;
+                }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .box {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        input {
+            padding: 6px;
+            margin-right: 5px;
+        }
+
+            input[readonly] {
+                background-color: #e9ecef;
+                color: #666;
+            }
+
+        button {
+            padding: 8px 12px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+            button.delete {
+                background-color: #dc3545;
+            }
+
+            button.edit {
+                background-color: #ffc107;
+                color: black;
+            }
+
+            button.search {
+                background-color: #17a2b8;
+            }
+
+            button.clear {
+                background-color: #6c757d;
+            }
+
+        .totais {
+            background: #e2e3e5;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 1.2em;
+            border-radius: 5px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .error {
+            color: white;
+            background-color: #dc3545;
+            padding: 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="index.html">📦 Estoque</a>
+        <a href="vendas.html">🛒 Vendas</a>
+    </nav>
+
+    <h2>Gestão de Inventário - Loja de Eletrônicos</h2>
+
+    <div class="totais">
+        Valor Total do Inventário em Estoque: R$ <span id="valorTotalEstoque">0.00</span>
+    </div>
+
+    <div class="box">
+        <h3>Pesquisar e Filtrar</h3>
+        <div class="form-group">
+            <input type="text" id="buscaNome" placeholder="Pesquisar por nome...">
+            <input type="text" id="buscaCategoria" placeholder="Filtrar por categoria...">
+            <button class="search" onclick="carregarProdutos()">Buscar</button>
+            <button class="clear" onclick="limparBusca()">Limpar</button>
+        </div>
+    </div>
+
+    <div class="box">
+        <h3 id="formTitulo">Adicionar / Atualizar Estoque</h3>
+        <input type="hidden" id="produtoId">
+        <div class="form-group">
+            <input type="text" id="nome" list="listaProdutos" placeholder="Nome do Produto" required oninput="verificarProdutoExistente()">
+            <datalist id="listaProdutos"></datalist>
+            <input type="text" id="categoria" placeholder="Categoria" required>
+        </div>
+        <div class="form-group">
+            <input type="number" id="quantidade" placeholder="Quantidade a adicionar" required>
+            <input type="number" id="preco" placeholder="Preço" step="0.01" required>
+        </div>
+        <button id="btnSalvar" onclick="salvarProduto()">Salvar Estoque</button>
+        <button class="clear" onclick="cancelarEdicao()" style="display:none;" id="btnCancelar">Cancelar Edição</button>
+        <div id="mensagemErro" class="error"></div>
+    </div>
+
+    <table>
+        <thead>
+            <tr><th>ID</th><th>Nome</th><th>Categoria</th><th>Qtd no Estoque</th><th>Preço Unitário (R$)</th><th>Valor em Estoque</th><th>Ações</th></tr>
+        </thead>
+        <tbody id="tabela-produtos"></tbody>
+    </table>
+
+    <script>
+        const apiUrl = '/api/produtos';
+        let produtosResumo = [];
+
+        async function carregarProdutosResumo() {
+            const response = await fetch(`${apiUrl}/resumo`);
+            produtosResumo = await response.json();
+
+            const datalist = document.getElementById('listaProdutos');
+            datalist.innerHTML = '';
+            produtosResumo.forEach(p => {
+                datalist.innerHTML += `<option value="${p.nome}">`;
+            });
+        }
+
+        function verificarProdutoExistente() {
+            const nomeDigitado = document.getElementById('nome').value;
+            const produtoConhecido = produtosResumo.find(p => p.nome.toLowerCase() === nomeDigitado.toLowerCase());
+            const campoCategoria = document.getElementById('categoria');
+            const campoPreco = document.getElementById('preco');
+
+            if (produtoConhecido && !document.getElementById('produtoId').value) {
+                campoCategoria.value = produtoConhecido.categoria;
+                campoCategoria.readOnly = true;
+                campoPreco.value = produtoConhecido.preco;
+                campoPreco.readOnly = true;
+            } else {
+                campoCategoria.readOnly = false;
+                campoPreco.readOnly = false;
+            }
+        }
+
+        async function carregarProdutos() {
+            const busca = document.getElementById('buscaNome').value;
+            const categoria = document.getElementById('buscaCategoria').value;
+            const response = await fetch(`${apiUrl}?busca=${encodeURIComponent(busca)}&categoria=${encodeURIComponent(categoria)}`);
+            const produtos = await response.json();
+
+            const tbody = document.getElementById('tabela-produtos');
+            tbody.innerHTML = '';
+            let somatorioEstoque = 0;
+
+            produtos.forEach(p => {
+                let valorAcumuladoItem = p.quantidade * p.preco;
+                somatorioEstoque += valorAcumuladoItem;
+
+                tbody.innerHTML += `<tr>
+                        <td>${p.id}</td><td>${p.nome}</td><td>${p.categoria}</td><td>${p.quantidade}</td>
+                        <td>R$ ${p.preco.toFixed(2)}</td><td>R$ ${valorAcumuladoItem.toFixed(2)}</td>
+                        <td>
+                            <button class="edit" onclick="prepararEdicao(${p.id}, '${p.nome}', '${p.categoria}', ${p.quantidade}, ${p.preco})">Editar</button>
+                            <button class="delete" onclick="deletarProduto(${p.id})">Remover</button>
+                        </td>
+                    </tr>`;
+            });
+
+            document.getElementById('valorTotalEstoque').innerText = somatorioEstoque.toFixed(2);
+        }
+
+        async function salvarProduto() {
+            const erroDiv = document.getElementById('mensagemErro');
+            erroDiv.style.display = 'none';
+
+            const id = document.getElementById('produtoId').value;
+            const produtoDTO = {
+                nome: document.getElementById('nome').value,
+                nomeCategoria: document.getElementById('categoria').value,
+                quantidade: parseInt(document.getElementById('quantidade').value),
+                preco: parseFloat(document.getElementById('preco').value)
+            };
+
+            let response;
+            if (id) {
+                response = await fetch(`${apiUrl}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(produtoDTO) });
+            } else {
+                response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(produtoDTO) });
+            }
+
+            if (response.ok) {
+                cancelarEdicao();
+                carregarProdutos();
+                carregarProdutosResumo();
+            } else {
+                const erro = await response.json();
+                erroDiv.innerText = erro.mensagem || "Erro ao salvar o produto.";
+                erroDiv.style.display = 'block';
+            }
+        }
+
+        function prepararEdicao(id, nome, categoria, quantidade, preco) {
+            document.getElementById('produtoId').value = id;
+            document.getElementById('nome').value = nome;
+            document.getElementById('categoria').value = categoria;
+            document.getElementById('quantidade').value = quantidade;
+            document.getElementById('preco').value = preco;
+
+            document.getElementById('categoria').readOnly = false;
+            document.getElementById('preco').readOnly = false;
+
+            document.getElementById('formTitulo').innerText = "Editar Produto ID: " + id;
+            document.getElementById('btnSalvar').innerText = "Atualizar Produto Inteiro";
+            document.getElementById('btnCancelar').style.display = "inline-block";
+            document.getElementById('mensagemErro').style.display = 'none';
+        }
+
+        function cancelarEdicao() {
+            document.getElementById('produtoId').value = '';
+            document.getElementById('nome').value = '';
+            document.getElementById('categoria').value = '';
+            document.getElementById('quantidade').value = '';
+            document.getElementById('preco').value = '';
+
+            document.getElementById('categoria').readOnly = false;
+            document.getElementById('preco').readOnly = false;
+
+            document.getElementById('formTitulo').innerText = "Adicionar / Atualizar Estoque";
+            document.getElementById('btnSalvar').innerText = "Salvar Estoque";
+            document.getElementById('btnCancelar').style.display = "none";
+            document.getElementById('mensagemErro').style.display = 'none';
+        }
+
+        async function deletarProduto(id) {
+            if (confirm("Remover este produto do banco de dados?")) {
+                await fetch(`${apiUrl}/${id}`, { method: 'DELETE' });
+                carregarProdutos();
+                carregarProdutosResumo();
+            }
+        }
+
+        function limparBusca() {
+            document.getElementById('buscaNome').value = '';
+            document.getElementById('buscaCategoria').value = '';
+            carregarProdutos();
+        }
+
+        carregarProdutosResumo();
+        carregarProdutos();
+    </script>
+</body>
+</html>

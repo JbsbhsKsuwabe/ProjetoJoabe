@@ -1,0 +1,156 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Registro de Vendas</title>
+</head>
+<body>
+    <nav>
+        <a href="index.html">Estoque</a> |
+        <a href="vendas.html">Vendas</a>
+    </nav>
+
+    <h2>Painel de Vendas</h2>
+
+    <!-- Filtros de Venda -->
+    <div>
+        <h3>Filtrar Relatório de Vendas</h3>
+        <input type="date" id="filtroData">
+        <input type="text" id="filtroProduto" placeholder="Filtrar por produto...">
+        <input type="text" id="filtroCategoria" placeholder="Filtrar por categoria...">
+        <button onclick="carregarVendas()">Aplicar Filtros</button>
+        <button onclick="limparFiltros()">Limpar</button>
+    </div>
+
+    <hr>
+
+    <!-- Registro de Venda -->
+    <div>
+        <h3>Registrar Nova Venda</h3>
+        <select id="produtoSelect" required>
+            <option value="">Selecione um produto no estoque...</option>
+        </select>
+        <input type="number" id="qtdVenda" placeholder="Qtd a vender" min="1" required>
+        <input type="date" id="dataVenda" required>
+        <button onclick="registrarVenda()">Confirmar Venda</button>
+        <p id="mensagemErro" style="color: red; display: none;"></p>
+    </div>
+
+    <br>
+
+    <!-- Tabela e Somatório -->
+    <p><strong>Valor Total Selecionado: R$ <span id="valorTotalGeral">0.00</span></strong></p>
+
+    <table border="1" width="100%">
+        <thead>
+            <tr>
+                <th>ID da Venda</th>
+                <th>Produto</th>
+                <th>Categoria</th>
+                <th>Quantidade</th>
+                <th>Data</th>
+                <th>Valor Total (R$)</th>
+            </tr>
+        </thead>
+        <tbody id="tabela-vendas"></tbody>
+    </table>
+
+    <script>
+        const apiVendas = '/api/vendas';
+        const apiProdutos = '/api/produtos';
+
+        document.getElementById('dataVenda').valueAsDate = new Date();
+
+        async function carregarOpcoesProdutos() {
+            const response = await fetch(apiProdutos);
+            const produtos = await response.json();
+            const select = document.getElementById('produtoSelect');
+            select.innerHTML = '<option value="">Selecione um produto no estoque...</option>';
+
+            produtos.forEach(p => {
+                if(p.quantidade > 0) {
+                    select.innerHTML += `<option value="${p.id}">${p.nome} (Estoque: ${p.quantidade} | R$ ${p.preco.toFixed(2)})</option>`;
+                }
+            });
+        }
+
+        async function carregarVendas() {
+            const data = document.getElementById('filtroData').value;
+            const produto = document.getElementById('filtroProduto').value;
+            const categoria = document.getElementById('filtroCategoria').value;
+
+            let url = `${apiVendas}?data=${data}&nome=${encodeURIComponent(produto)}&categoria=${encodeURIComponent(categoria)}`;
+
+            const response = await fetch(url);
+            const vendas = await response.json();
+
+            const tbody = document.getElementById('tabela-vendas');
+            tbody.innerHTML = '';
+
+            let somatorio = 0;
+
+            vendas.forEach(v => {
+                somatorio += v.valorTotal;
+                const dataFormatada = new Date(v.dataVenda).toLocaleDateString('pt-BR');
+
+                tbody.innerHTML += `<tr>
+                    <td>${v.id}</td>
+                    <td>${v.nomeProduto}</td>
+                    <td>${v.categoria}</td>
+                    <td>${v.quantidade}</td>
+                    <td>${dataFormatada}</td>
+                    <td>R$ ${v.valorTotal.toFixed(2)}</td>
+                </tr>`;
+            });
+
+            document.getElementById('valorTotalGeral').innerText = somatorio.toFixed(2);
+        }
+
+        async function registrarVenda() {
+            const erroDiv = document.getElementById('mensagemErro');
+            erroDiv.style.display = 'none';
+
+            const produtoId = document.getElementById('produtoSelect').value;
+            const quantidade = parseInt(document.getElementById('qtdVenda').value);
+            const dataVenda = document.getElementById('dataVenda').value;
+
+            if(!produtoId || !quantidade || !dataVenda) {
+                alert("Preencha todos os campos!"); return;
+            }
+
+            const vendaDTO = {
+                produtoId: parseInt(produtoId),
+                quantidade: quantidade,
+                dataVenda: new Date(dataVenda).toISOString()
+            };
+
+            const response = await fetch(apiVendas, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(vendaDTO)
+            });
+
+            if(response.ok) {
+                document.getElementById('qtdVenda').value = '';
+                document.getElementById('dataVenda').valueAsDate = new Date();
+                carregarOpcoesProdutos();
+                carregarVendas();
+            } else {
+                const erro = await response.json();
+                erroDiv.innerText = erro.mensagem || "Erro ao registrar venda.";
+                erroDiv.style.display = 'block';
+            }
+        }
+
+        function limparFiltros() {
+            document.getElementById('filtroData').value = '';
+            document.getElementById('filtroProduto').value = '';
+            document.getElementById('filtroCategoria').value = '';
+            carregarVendas();
+        }
+
+        carregarOpcoesProdutos();
+        carregarVendas();
+    </script>
+</body>
+</html>

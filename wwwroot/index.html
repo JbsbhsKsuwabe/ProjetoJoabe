@@ -1,0 +1,202 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Inventário de Eletrônicos</title>
+</head>
+<body>
+    <nav>
+        <a href="index.html">Estoque</a> |
+        <a href="vendas.html">Vendas</a>
+    </nav>
+
+    <h2>Gestão de Inventário - Loja de Eletrônicos</h2>
+
+    <p><strong>Valor Total do Inventário em Estoque: R$ <span id="valorTotalEstoque">0.00</span></strong></p>
+
+    <!-- Pesquisar e Filtrar -->
+    <div>
+        <h3>Pesquisar e Filtrar</h3>
+        <input type="text" id="buscaNome" placeholder="Pesquisar por nome...">
+        <input type="text" id="buscaCategoria" placeholder="Filtrar por categoria...">
+        <button onclick="carregarProdutos()">Buscar</button>
+        <button onclick="limparBusca()">Limpar</button>
+    </div>
+
+    <hr>
+
+    <!-- Adicionar / Atualizar Estoque -->
+    <div>
+        <h3 id="formTitulo">Adicionar / Atualizar Estoque</h3>
+        <input type="hidden" id="produtoId">
+
+        <input type="text" id="nome" list="listaProdutos" placeholder="Nome do Produto" required oninput="verificarProdutoExistente()">
+        <datalist id="listaProdutos"></datalist>
+
+        <input type="text" id="categoria" placeholder="Categoria" required>
+        <input type="number" id="quantidade" placeholder="Quantidade a adicionar" required>
+        <input type="number" id="preco" placeholder="Preço" step="0.01" required>
+
+        <button id="btnSalvar" onclick="salvarProduto()">Salvar Estoque</button>
+        <button onclick="cancelarEdicao()" style="display:none;" id="btnCancelar">Cancelar Edição</button>
+        <p id="mensagemErro" style="color: red; display: none;"></p>
+    </div>
+
+    <br>
+
+    <!-- Tabela de Produtos -->
+    <table border="1" width="100%">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Categoria</th>
+                <th>Qtd no Estoque</th>
+                <th>Preço Unitário (R$)</th>
+                <th>Valor em Estoque</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody id="tabela-produtos"></tbody>
+    </table>
+
+    <script>
+        const apiUrl = '/api/produtos';
+        let produtosResumo = [];
+
+        async function carregarProdutosResumo() {
+            const response = await fetch(`${apiUrl}/resumo`);
+            produtosResumo = await response.json();
+
+            const datalist = document.getElementById('listaProdutos');
+            datalist.innerHTML = '';
+            produtosResumo.forEach(p => {
+                datalist.innerHTML += `<option value="${p.nome}">`;
+            });
+        }
+
+        function verificarProdutoExistente() {
+            const nomeDigitado = document.getElementById('nome').value;
+            const produtoConhecido = produtosResumo.find(p => p.nome.toLowerCase() === nomeDigitado.toLowerCase());
+            const campoCategoria = document.getElementById('categoria');
+            const campoPreco = document.getElementById('preco');
+
+            if (produtoConhecido && !document.getElementById('produtoId').value) {
+                campoCategoria.value = produtoConhecido.categoria;
+                campoCategoria.readOnly = true;
+                campoPreco.value = produtoConhecido.preco;
+                campoPreco.readOnly = true;
+            } else {
+                campoCategoria.readOnly = false;
+                campoPreco.readOnly = false;
+            }
+        }
+
+        async function carregarProdutos() {
+            const busca = document.getElementById('buscaNome').value;
+            const categoria = document.getElementById('buscaCategoria').value;
+            const response = await fetch(`${apiUrl}?busca=${encodeURIComponent(busca)}&categoria=${encodeURIComponent(categoria)}`);
+            const produtos = await response.json();
+
+            const tbody = document.getElementById('tabela-produtos');
+            tbody.innerHTML = '';
+            let somatorioEstoque = 0;
+
+            produtos.forEach(p => {
+                let valorAcumuladoItem = p.quantidade * p.preco;
+                somatorioEstoque += valorAcumuladoItem;
+
+                tbody.innerHTML += `<tr>
+                    <td>${p.id}</td><td>${p.nome}</td><td>${p.categoria}</td><td>${p.quantidade}</td>
+                    <td>R$ ${p.preco.toFixed(2)}</td><td>R$ ${valorAcumuladoItem.toFixed(2)}</td>
+                    <td>
+                        <button onclick="prepararEdicao(${p.id}, '${p.nome}', '${p.categoria}', ${p.quantidade}, ${p.preco})">Editar</button>
+                        <button onclick="deletarProduto(${p.id})">Remover</button>
+                    </td>
+                </tr>`;
+            });
+
+            document.getElementById('valorTotalEstoque').innerText = somatorioEstoque.toFixed(2);
+        }
+
+        async function salvarProduto() {
+            const erroDiv = document.getElementById('mensagemErro');
+            erroDiv.style.display = 'none';
+
+            const id = document.getElementById('produtoId').value;
+            const produtoDTO = {
+                nome: document.getElementById('nome').value,
+                nomeCategoria: document.getElementById('categoria').value,
+                quantidade: parseInt(document.getElementById('quantidade').value),
+                preco: parseFloat(document.getElementById('preco').value)
+            };
+
+            let response;
+            if (id) {
+                response = await fetch(`${apiUrl}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(produtoDTO) });
+            } else {
+                response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(produtoDTO) });
+            }
+
+            if (response.ok) {
+                cancelarEdicao();
+                carregarProdutos();
+                carregarProdutosResumo();
+            } else {
+                const erro = await response.json();
+                erroDiv.innerText = erro.mensagem || "Erro ao salvar o produto.";
+                erroDiv.style.display = 'block';
+            }
+        }
+
+        function prepararEdicao(id, nome, categoria, quantidade, preco) {
+            document.getElementById('produtoId').value = id;
+            document.getElementById('nome').value = nome;
+            document.getElementById('categoria').value = categoria;
+            document.getElementById('quantidade').value = quantidade;
+            document.getElementById('preco').value = preco;
+
+            document.getElementById('categoria').readOnly = false;
+            document.getElementById('preco').readOnly = false;
+
+            document.getElementById('formTitulo').innerText = "Editar Produto ID: " + id;
+            document.getElementById('btnSalvar').innerText = "Atualizar Produto Inteiro";
+            document.getElementById('btnCancelar').style.display = "inline-block";
+            document.getElementById('mensagemErro').style.display = 'none';
+        }
+
+        function cancelarEdicao() {
+            document.getElementById('produtoId').value = '';
+            document.getElementById('nome').value = '';
+            document.getElementById('categoria').value = '';
+            document.getElementById('quantidade').value = '';
+            document.getElementById('preco').value = '';
+
+            document.getElementById('categoria').readOnly = false;
+            document.getElementById('preco').readOnly = false;
+
+            document.getElementById('formTitulo').innerText = "Adicionar / Atualizar Estoque";
+            document.getElementById('btnSalvar').innerText = "Salvar Estoque";
+            document.getElementById('btnCancelar').style.display = "none";
+            document.getElementById('mensagemErro').style.display = 'none';
+        }
+
+        async function deletarProduto(id) {
+            if(confirm("Remover este produto do banco de dados?")) {
+                await fetch(`${apiUrl}/${id}`, { method: 'DELETE' });
+                carregarProdutos();
+                carregarProdutosResumo();
+            }
+        }
+
+        function limparBusca() {
+            document.getElementById('buscaNome').value = '';
+            document.getElementById('buscaCategoria').value = '';
+            carregarProdutos();
+        }
+
+        carregarProdutosResumo();
+        carregarProdutos();
+    </script>
+</body>
+</html>
